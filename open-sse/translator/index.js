@@ -1,5 +1,5 @@
 import { FORMATS } from "./formats.js";
-import { ensureToolCallIds, fixMissingToolResponses } from "./helpers/toolCallHelper.js";
+import { ensureToolCallIds, fixMissingToolResponses, fixDeepSeekReasoningContent } from "./helpers/toolCallHelper.js";
 import { prepareClaudeRequest } from "./helpers/claudeHelper.js";
 import { filterToOpenAIFormat } from "./helpers/openaiHelper.js";
 import { normalizeThinkingConfig } from "../services/provider.js";
@@ -62,6 +62,9 @@ export function translateRequest(sourceFormat, targetFormat, model, body, stream
   
   // Fix missing tool responses (insert empty tool_result if needed)
   fixMissingToolResponses(result);
+
+  // DeepSeek reasoner requires reasoning_content on assistant tool_call messages
+  fixDeepSeekReasoningContent(result, model);
 
   // If same format, skip translation steps
   if (sourceFormat !== targetFormat) {

@@ -75,6 +75,27 @@ export function hasToolResults(msg, toolCallIds) {
   return false;
 }
 
+// DeepSeek reasoning models (e.g. deepseek-reasoner) require a `reasoning_content`
+// field on every assistant message that contains tool_calls. When the client sends
+// conversation history without it (e.g. Claude Code never echoes thinking back),
+// the upstream API returns 400: "Missing reasoning_content field".
+// Fix: inject an empty string when the field is absent.
+export function fixDeepSeekReasoningContent(body, model) {
+  if (!model) return body;
+  const isDeepSeekReasoner = /deepseek.reasoner/i.test(model);
+  if (!isDeepSeekReasoner) return body;
+  if (!body.messages || !Array.isArray(body.messages)) return body;
+
+  for (const msg of body.messages) {
+    if (msg.role === "assistant" && msg.tool_calls && msg.tool_calls.length > 0) {
+      if (msg.reasoning_content === undefined || msg.reasoning_content === null) {
+        msg.reasoning_content = "";
+      }
+    }
+  }
+  return body;
+}
+
 // Fix missing tool responses - insert empty tool_result if assistant has tool_use but next message has no tool_result
 export function fixMissingToolResponses(body) {
   if (!body.messages || !Array.isArray(body.messages)) return body;
