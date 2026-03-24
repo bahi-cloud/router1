@@ -3,11 +3,42 @@ import { proxyAwareFetch } from "../utils/proxyFetch.js";
 
 /**
  * BaseExecutor - Base class for provider executors
+ *
+ * Supports per-provider proxy configuration via credentials.proxy:
+ * {
+ *   url: "http://user:pass@proxy.com:8080" | "socks5://proxy.com:1080",
+ *   bypass: ["*.local", "localhost"]
+ * }
  */
 export class BaseExecutor {
   constructor(provider, config) {
     this.provider = provider;
     this.config = config;
+  }
+
+  /**
+   * Get proxy agent for request
+   *
+   * Checks provider-specific proxy config first, falls back to global env vars.
+   * Respects bypass patterns from both provider config and NO_PROXY env var.
+   *
+   * @param {string} targetUrl - Target URL
+   * @param {object} credentials - Provider credentials (may include proxy config)
+   * @returns {Promise<Agent|null>} Proxy agent or null (for direct connection)
+   */
+  /**
+   * Build per-provider proxy options from credentials
+   * @param {object} credentials - Provider credentials (may include proxy config)
+   * @returns {object|null} Proxy options for proxyAwareFetch
+   */
+  getProviderProxyOptions(credentials = {}) {
+    const proxyConfig = credentials.proxy;
+    if (!proxyConfig?.url) return null;
+    return {
+      enabled: true,
+      url: proxyConfig.url,
+      noProxy: Array.isArray(proxyConfig.bypass) ? proxyConfig.bypass.join(',') : '',
+    };
   }
 
   getProvider() {
@@ -89,13 +120,17 @@ export class BaseExecutor {
 
       if (!retryAttemptsByUrl[urlIndex]) retryAttemptsByUrl[urlIndex] = 0;
 
+      // Build per-provider proxy options (merged with global proxyOptions)
+      const providerProxy = this.getProviderProxyOptions(credentials);
+      const effectiveProxyOptions = providerProxy || proxyOptions;
+
       try {
         const response = await proxyAwareFetch(url, {
           method: "POST",
           headers,
           body: JSON.stringify(transformedBody),
           signal
-        }, proxyOptions);
+        }, effectiveProxyOptions);
 
         // Retry 429 with fixed delay before falling back to next URL
         if (response.status === HTTP_STATUS.RATE_LIMITED && retryAttemptsByUrl[urlIndex] < RETRY_CONFIG.maxAttempts) {
